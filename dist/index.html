@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#12324a">
+  <meta name="description" content="Créez localement des planches de photos d’identité prêtes à imprimer.">
+  <title>Planche Photo ID</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Planche Photo ID, accueil">
+      <span class="brand-mark" aria-hidden="true">ID</span>
+      <span>Planche Photo ID</span>
+    </a>
+    <div class="privacy"><span aria-hidden="true">●</span> Traitement local — aucune photo envoyée</div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel photos-panel" aria-labelledby="photos-title">
+      <div class="panel-heading">
+        <div><span class="step">1</span><h1 id="photos-title">Photos</h1></div>
+        <span id="photoCount" class="count">0</span>
+      </div>
+      <label class="drop-zone" id="dropZone" for="photoInput" tabindex="0">
+        <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+        <span class="drop-icon" aria-hidden="true">＋</span>
+        <strong>Ajouter des photos</strong>
+        <small>Glissez-les ici ou parcourez vos fichiers</small>
+      </label>
+      <div id="photoList" class="photo-list" aria-live="polite"></div>
+      <div id="emptyPhotos" class="empty-state">Ajoutez une ou plusieurs photos pour commencer.</div>
+    </section>
+
+    <section class="panel crop-panel" aria-labelledby="crop-title">
+      <div class="panel-heading">
+        <div><span class="step">2</span><h2 id="crop-title">Cadrage</h2></div>
+        <button id="resetCrop" class="text-button" type="button" disabled>Recentrer</button>
+      </div>
+      <div class="crop-stage" id="cropStage">
+        <canvas id="cropCanvas" width="700" height="900" aria-label="Zone de cadrage de la photo"></canvas>
+        <div id="cropPlaceholder" class="canvas-placeholder">
+          <span aria-hidden="true">↖</span>
+          <p>Sélectionnez une photo</p>
+        </div>
+      </div>
+      <div class="crop-controls">
+        <label for="zoomRange">Zoom</label>
+        <input id="zoomRange" type="range" min="1" max="3" value="1" step="0.01" disabled>
+        <output id="zoomValue" for="zoomRange">100 %</output>
+      </div>
+      <div class="guide-legend">
+        <span><i class="line eye"></i>Ligne des yeux</span>
+        <span><i class="line face"></i>Hauteur du visage 32–36 mm</span>
+      </div>
+    </section>
+
+    <section class="panel sheet-panel" aria-labelledby="sheet-title">
+      <div class="panel-heading">
+        <div><span class="step">3</span><h2 id="sheet-title">Planche</h2></div>
+        <span id="capacityBadge" class="capacity">0 emplacement</span>
+      </div>
+
+      <div class="settings-grid">
+        <label>Format photo
+          <select id="photoFormat">
+            <option value="35x45">France · 35 × 45 mm</option>
+            <option value="30x40">30 × 40 mm</option>
+            <option value="51x51">États-Unis · 51 × 51 mm</option>
+            <option value="custom">Personnalisé</option>
+          </select>
+        </label>
+        <label>Format du papier
+          <select id="paperFormat">
+            <option value="210x297">A4 · 210 × 297 mm</option>
+            <option value="148x210">A5 · 148 × 210 mm</option>
+            <option value="105x148">A6 · 105 × 148 mm</option>
+            <option value="100x150">Photo · 10 × 15 cm</option>
+            <option value="custom">Personnalisé</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="customPhotoSize" class="custom-size" hidden>
+        <label>Largeur <input id="photoWidth" type="number" min="15" max="100" value="35"> mm</label>
+        <label>Hauteur <input id="photoHeight" type="number" min="15" max="100" value="45"> mm</label>
+      </div>
+      <div id="customPaperSize" class="custom-size" hidden>
+        <label>Largeur <input id="paperWidth" type="number" min="70" max="500" value="210"> mm</label>
+        <label>Hauteur <input id="paperHeight" type="number" min="70" max="500" value="297"> mm</label>
+      </div>
+
+      <div class="options-row">
+        <label class="switch-label"><input id="autoFill" type="checkbox" checked><span class="switch" aria-hidden="true"></span>Remplir toute la feuille</label>
+        <label class="switch-label"><input id="cutMarks" type="checkbox" checked><span class="switch" aria-hidden="true"></span>Traits de découpe</label>
+      </div>
+
+      <div class="advanced-row">
+        <label>Marge <input id="margin" type="number" min="0" max="30" value="8" step="1"> mm</label>
+        <label>Espacement <input id="gap" type="number" min="0" max="15" value="3" step="1"> mm</label>
+      </div>
+
+      <div class="sheet-preview-wrap">
+        <canvas id="sheetCanvas" width="595" height="842" aria-label="Aperçu de la planche"></canvas>
+        <div id="sheetEmpty" class="sheet-empty">L’aperçu apparaîtra ici.</div>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <button id="downloadPdf" class="primary-button" type="button" disabled>
+        <span>Télécharger le PDF prêt à imprimer</span><span aria-hidden="true">↓</span>
+      </button>
+      <p class="print-note">Imprimez le PDF à <strong>100 % / taille réelle</strong>, sans option « ajuster à la page ».</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Assistant de mise au format. Pour une CNI ou un passeport, la photo doit provenir d’un professionnel habilité ou d’une cabine agréée.</p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
