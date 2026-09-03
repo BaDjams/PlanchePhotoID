@@ -6,6 +6,7 @@ const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf
 const app = await readFile(new URL("../dist/app.js", import.meta.url), "utf8");
 const styles = await readFile(new URL("../dist/styles.css", import.meta.url), "utf8");
 const manifest = JSON.parse(await readFile(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"));
+const serviceWorker = await readFile(new URL("../dist/sw.js", import.meta.url), "utf8");
 
 test("l’application ne charge aucune ressource distante", () => {
   assert.doesNotMatch(html, /(?:src|href)=["']https?:\/\//i);
@@ -37,4 +38,9 @@ test("le PDF conserve des dimensions physiques exactes", () => {
 test("la web app est installable en mode autonome", () => {
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.start_url, "./");
+});
+
+test("une correction remplace immédiatement l’ancien cache", () => {
+  assert.match(serviceWorker, /skipWaiting\(\)/);
+  assert.match(serviceWorker, /clients\.claim\(\)/);
 });
