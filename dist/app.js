@@ -6,6 +6,7 @@ const state = {
   activeId: null,
   dragging: false,
   pointer: { x: 0, y: 0 },
+  cropMode: "id",
   photoSize: { w: 35, h: 45 },
   paperSize: { w: 210, h: 297 },
   layout: null
@@ -20,44 +21,50 @@ function activePhoto() {
   return state.photos.find(photo => photo.id === state.activeId) || null;
 }
 
-function cropDimensions() {
+function cropProperty(mode = state.cropMode) {
+  return mode === "large" ? "largeCrop" : "crop";
+}
+
+function cropDimensions(mode = state.cropMode) {
   const width = 700;
+  if (mode === "large") return { width, height: 1050 };
   return { width, height: Math.round(width * state.photoSize.h / state.photoSize.w) };
 }
 
-function ensureCropState(photo, reset = false) {
-  const { width, height } = cropDimensions();
-  cropCanvas.width = width;
-  cropCanvas.height = height;
+function ensureCropState(photo, reset = false, mode = state.cropMode) {
+  const { width, height } = cropDimensions(mode);
+  const property = cropProperty(mode);
   const base = Math.max(width / photo.image.naturalWidth, height / photo.image.naturalHeight);
-  if (reset || !photo.crop) {
-    photo.crop = {
+  if (reset || !photo[property]) {
+    photo[property] = {
       zoom: 1,
       x: (width - photo.image.naturalWidth * base) / 2,
       y: (height - photo.image.naturalHeight * base) / 2
     };
   }
-  photo.crop.zoom = Math.max(1, Math.min(5, photo.crop.zoom));
-  clampCrop(photo);
+  photo[property].zoom = Math.max(1, Math.min(5, photo[property].zoom));
+  clampCrop(photo, mode);
 }
 
-function cropScale(photo) {
-  const { width, height } = cropDimensions();
-  return Math.max(width / photo.image.naturalWidth, height / photo.image.naturalHeight) * photo.crop.zoom;
+function cropScale(photo, mode = state.cropMode) {
+  const { width, height } = cropDimensions(mode);
+  return Math.max(width / photo.image.naturalWidth, height / photo.image.naturalHeight) * photo[cropProperty(mode)].zoom;
 }
 
-function clampCrop(photo) {
-  const { width, height } = cropDimensions();
-  const scale = cropScale(photo);
+function clampCrop(photo, mode = state.cropMode) {
+  const { width, height } = cropDimensions(mode);
+  const crop = photo[cropProperty(mode)];
+  const scale = cropScale(photo, mode);
   const drawnW = photo.image.naturalWidth * scale;
   const drawnH = photo.image.naturalHeight * scale;
-  photo.crop.x = Math.min(0, Math.max(width - drawnW, photo.crop.x));
-  photo.crop.y = Math.min(0, Math.max(height - drawnH, photo.crop.y));
+  crop.x = Math.min(0, Math.max(width - drawnW, crop.x));
+  crop.y = Math.min(0, Math.max(height - drawnH, crop.y));
 }
 
 function renderCrop() {
   const photo = activePhoto();
-  const { width, height } = cropDimensions();
+  const mode = state.cropMode;
+  const { width, height } = cropDimensions(mode);
   if (cropCanvas.width !== width || cropCanvas.height !== height) {
     cropCanvas.width = width;
     cropCanvas.height = height;
@@ -65,9 +72,12 @@ function renderCrop() {
   cropCtx.fillStyle = "#243a46";
   cropCtx.fillRect(0, 0, width, height);
   if (!photo) return;
-  ensureCropState(photo);
-  const scale = cropScale(photo);
-  cropCtx.drawImage(photo.image, photo.crop.x, photo.crop.y, photo.image.naturalWidth * scale, photo.image.naturalHeight * scale);
+  ensureCropState(photo, false, mode);
+  const crop = photo[cropProperty(mode)];
+  const scale = cropScale(photo, mode);
+  cropCtx.drawImage(photo.image, crop.x, crop.y, photo.image.naturalWidth * scale, photo.image.naturalHeight * scale);
+
+  if (mode === "large") return;
 
   cropCtx.save();
   cropCtx.fillStyle = "rgba(7, 24, 34, .28)";
@@ -113,11 +123,12 @@ function addFiles(fileList) {
           url: reader.result,
           image,
           crop: null,
+          largeCrop: null,
           copies: 4
         };
         state.photos.push(photo);
         state.activeId = photo.id;
-        ensureCropState(photo, true);
+        ensureCropState(photo, true, "id");
         refreshAll();
       };
       image.onerror = () => setStatus(`Impossible de lire ${file.name}.`);
@@ -178,14 +189,12 @@ function renderPhotoList() {
     item.append(thumb, meta, copyLabel, remove);
     item.addEventListener("click", () => {
       state.activeId = photo.id;
-      ensureCropState(photo);
       refreshAll();
     });
     item.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         state.activeId = photo.id;
-        ensureCropState(photo);
         refreshAll();
       }
     });
@@ -242,37 +251,20 @@ function slotPhotos(layout) {
   });
 }
 
-function drawCropped(ctx, photo, x, y, width, height) {
-  const dims = cropDimensions();
-  const scale = cropScale(photo);
-  const sourceX = -photo.crop.x / scale;
-  const sourceY = -photo.crop.y / scale;
+function drawCropped(ctx, photo, x, y, width, height, mode = "id") {
+  ensureCropState(photo, false, mode);
+  const crop = photo[cropProperty(mode)];
+  const dims = cropDimensions(mode);
+  const scale = cropScale(photo, mode);
+  const sourceX = -crop.x / scale;
+  const sourceY = -crop.y / scale;
   const sourceW = dims.width / scale;
   const sourceH = dims.height / scale;
   ctx.drawImage(photo.image, sourceX, sourceY, sourceW, sourceH, x, y, width, height);
 }
 
 function drawLargeCropped(ctx, photo, x, y, width, height) {
-  ensureCropState(photo);
-  const dims = cropDimensions();
-  const scale = cropScale(photo);
-  const focalX = (dims.width / 2 - photo.crop.x) / scale;
-  const focalY = (dims.height / 2 - photo.crop.y) / scale;
-  const imageW = photo.image.naturalWidth;
-  const imageH = photo.image.naturalHeight;
-  const targetRatio = width / height;
-  let sourceW;
-  let sourceH;
-  if (imageW / imageH > targetRatio) {
-    sourceH = imageH;
-    sourceW = sourceH * targetRatio;
-  } else {
-    sourceW = imageW;
-    sourceH = sourceW / targetRatio;
-  }
-  const sourceX = Math.max(0, Math.min(imageW - sourceW, focalX - sourceW / 2));
-  const sourceY = Math.max(0, Math.min(imageH - sourceH, focalY - sourceH / 2));
-  ctx.drawImage(photo.image, sourceX, sourceY, sourceW, sourceH, x, y, width, height);
+  drawCropped(ctx, photo, x, y, width, height, "large");
 }
 
 function layoutPlacements(layout) {
@@ -327,6 +319,9 @@ function drawPreviewMarks(ctx, x, y, w, h, scale) {
 
 function refreshAll() {
   const mixed = $("layoutMode").value === "mixed-a4";
+  const photo = activePhoto();
+  const largeCropAvailable = mixed && photo && state.photos.indexOf(photo) < 2;
+  if (!mixed || (!largeCropAvailable && state.cropMode === "large")) state.cropMode = "id";
   $("photoFormat").disabled = mixed;
   $("paperFormat").disabled = mixed;
   $("autoFill").disabled = mixed;
@@ -334,6 +329,17 @@ function refreshAll() {
   $("margin").disabled = mixed;
   $("gap").disabled = mixed;
   $("mixedLayoutHint").hidden = !mixed;
+  $("cropModeControls").hidden = !mixed;
+  $("cropModeLarge").disabled = !largeCropAvailable;
+  $("cropModeLarge").title = largeCropAvailable ? "" : "Disponible pour les deux premières photos";
+  $("cropModeId").classList.toggle("active", state.cropMode === "id");
+  $("cropModeLarge").classList.toggle("active", state.cropMode === "large");
+  $("cropModeId").setAttribute("aria-pressed", String(state.cropMode === "id"));
+  $("cropModeLarge").setAttribute("aria-pressed", String(state.cropMode === "large"));
+  $("guideLegend").hidden = state.cropMode === "large";
+  const cropSize = cropDimensions();
+  $("cropStage").style.aspectRatio = `${cropSize.width} / ${cropSize.height}`;
+  cropCanvas.setAttribute("aria-label", state.cropMode === "large" ? "Zone de cadrage du tirage 10 par 15" : "Zone de cadrage de la photo d’identité");
   if (mixed) {
     $("photoFormat").value = "35x45";
     $("paperFormat").value = "210x297";
@@ -341,14 +347,14 @@ function refreshAll() {
     $("customPaperSize").hidden = true;
   }
   renderPhotoList();
-  const photo = activePhoto();
   $("cropPlaceholder").hidden = Boolean(photo);
   $("zoomRange").disabled = !photo;
   $("resetCrop").disabled = !photo;
   if (photo) {
     ensureCropState(photo);
-    $("zoomRange").value = photo.crop.zoom;
-    $("zoomValue").textContent = `${Math.round(photo.crop.zoom * 100)} %`;
+    const crop = photo[cropProperty()];
+    $("zoomRange").value = crop.zoom;
+    $("zoomValue").textContent = `${Math.round(crop.zoom * 100)} %`;
   } else {
     $("zoomValue").textContent = "100 %";
   }
@@ -360,15 +366,16 @@ function setZoom(value) {
   const photo = activePhoto();
   if (!photo) return;
   const dims = cropDimensions();
+  const crop = photo[cropProperty()];
   const oldScale = cropScale(photo);
-  const imageCenterX = (dims.width / 2 - photo.crop.x) / oldScale;
-  const imageCenterY = (dims.height / 2 - photo.crop.y) / oldScale;
-  photo.crop.zoom = Number(value);
+  const imageCenterX = (dims.width / 2 - crop.x) / oldScale;
+  const imageCenterY = (dims.height / 2 - crop.y) / oldScale;
+  crop.zoom = Number(value);
   const newScale = cropScale(photo);
-  photo.crop.x = dims.width / 2 - imageCenterX * newScale;
-  photo.crop.y = dims.height / 2 - imageCenterY * newScale;
+  crop.x = dims.width / 2 - imageCenterX * newScale;
+  crop.y = dims.height / 2 - imageCenterY * newScale;
   clampCrop(photo);
-  $("zoomValue").textContent = `${Math.round(photo.crop.zoom * 100)} %`;
+  $("zoomValue").textContent = `${Math.round(crop.zoom * 100)} %`;
   renderCrop();
   renderSheet();
 }
@@ -388,8 +395,9 @@ cropCanvas.addEventListener("pointermove", event => {
   const photo = activePhoto();
   if (!photo || !state.dragging) return;
   const point = canvasPoint(event);
-  photo.crop.x += point.x - state.pointer.x;
-  photo.crop.y += point.y - state.pointer.y;
+  const crop = photo[cropProperty()];
+  crop.x += point.x - state.pointer.x;
+  crop.y += point.y - state.pointer.y;
   state.pointer = point;
   clampCrop(photo);
   renderCrop();
@@ -527,20 +535,29 @@ $("zoomRange").addEventListener("input", event => setZoom(event.target.value));
 $("resetCrop").addEventListener("click", () => { const photo = activePhoto(); if (photo) { ensureCropState(photo, true); refreshAll(); } });
 $("downloadPdf").addEventListener("click", downloadPdf);
 
+document.querySelectorAll("[data-crop-mode]").forEach(button => button.addEventListener("click", () => {
+  const photo = activePhoto();
+  if (!photo || button.disabled) return;
+  state.cropMode = button.dataset.cropMode;
+  ensureCropState(photo);
+  refreshAll();
+}));
+
 $("layoutMode").addEventListener("change", () => {
+  state.cropMode = "id";
   readSizes();
-  state.photos.forEach(photo => ensureCropState(photo, true));
+  state.photos.forEach(photo => ensureCropState(photo, true, "id"));
   refreshAll();
 });
 
 $("photoFormat").addEventListener("change", () => {
   $("customPhotoSize").hidden = $("photoFormat").value !== "custom";
   readSizes();
-  state.photos.forEach(photo => ensureCropState(photo, true));
+  state.photos.forEach(photo => ensureCropState(photo, true, "id"));
   refreshAll();
 });
 $("paperFormat").addEventListener("change", () => { $("customPaperSize").hidden = $("paperFormat").value !== "custom"; refreshAll(); });
-["photoWidth","photoHeight"].forEach(id => $(id).addEventListener("input", () => { readSizes(); state.photos.forEach(photo => ensureCropState(photo, true)); refreshAll(); }));
+["photoWidth","photoHeight"].forEach(id => $(id).addEventListener("input", () => { readSizes(); state.photos.forEach(photo => ensureCropState(photo, true, "id")); refreshAll(); }));
 ["paperWidth","paperHeight","autoFill","groupBySource","cutMarks","margin","gap"].forEach(id => $(id).addEventListener("input", refreshAll));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
