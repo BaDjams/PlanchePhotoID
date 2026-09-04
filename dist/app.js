@@ -154,7 +154,7 @@ function renderPhotoList() {
     copyInput.min = "0";
     copyInput.max = "99";
     copyInput.value = photo.copies;
-    copyInput.disabled = $("autoFill").checked;
+    copyInput.disabled = $("autoFill").checked || $("layoutMode").value === "mixed-a4";
     copyInput.setAttribute("aria-label", `Nombre de copies de ${photo.name}`);
     copyInput.addEventListener("click", event => event.stopPropagation());
     copyInput.addEventListener("keydown", event => event.stopPropagation());
@@ -196,6 +196,11 @@ function renderPhotoList() {
 }
 
 function readSizes() {
+  if ($("layoutMode").value === "mixed-a4") {
+    state.photoSize = { w: 35, h: 45 };
+    state.paperSize = { w: 210, h: 297 };
+    return;
+  }
   if ($("photoFormat").value === "custom") {
     state.photoSize = { w: numberValue("photoWidth", 35), h: numberValue("photoHeight", 45) };
   } else {
@@ -217,6 +222,7 @@ function numberValue(id, fallback) {
 
 function calculateLayout() {
   readSizes();
+  if ($("layoutMode").value === "mixed-a4") return window.PhotoLayout.buildMixedA4Layout(state.photos);
   const margin = Math.max(0, numberValue("margin", 8));
   const gap = Math.max(0, numberValue("gap", 3));
   const { w: paperW, h: paperH } = state.paperSize;
@@ -226,7 +232,7 @@ function calculateLayout() {
   const capacity = cols * rows;
   const gridW = cols ? cols * photoW + (cols - 1) * gap : 0;
   const gridH = rows ? rows * photoH + (rows - 1) * gap : 0;
-  return { margin, gap, paperW, paperH, photoW, photoH, cols, rows, capacity, startX: (paperW - gridW) / 2, startY: (paperH - gridH) / 2 };
+  return { mixed: false, margin, gap, paperW, paperH, photoW, photoH, cols, rows, capacity, startX: (paperW - gridW) / 2, startY: (paperH - gridH) / 2 };
 }
 
 function slotPhotos(layout) {
@@ -246,6 +252,46 @@ function drawCropped(ctx, photo, x, y, width, height) {
   ctx.drawImage(photo.image, sourceX, sourceY, sourceW, sourceH, x, y, width, height);
 }
 
+function drawLargeCropped(ctx, photo, x, y, width, height) {
+  ensureCropState(photo);
+  const dims = cropDimensions();
+  const scale = cropScale(photo);
+  const focalX = (dims.width / 2 - photo.crop.x) / scale;
+  const focalY = (dims.height / 2 - photo.crop.y) / scale;
+  const imageW = photo.image.naturalWidth;
+  const imageH = photo.image.naturalHeight;
+  const targetRatio = width / height;
+  let sourceW;
+  let sourceH;
+  if (imageW / imageH > targetRatio) {
+    sourceH = imageH;
+    sourceW = sourceH * targetRatio;
+  } else {
+    sourceW = imageW;
+    sourceH = sourceW / targetRatio;
+  }
+  const sourceX = Math.max(0, Math.min(imageW - sourceW, focalX - sourceW / 2));
+  const sourceY = Math.max(0, Math.min(imageH - sourceH, focalY - sourceH / 2));
+  ctx.drawImage(photo.image, sourceX, sourceY, sourceW, sourceH, x, y, width, height);
+}
+
+function layoutPlacements(layout) {
+  if (layout.mixed) return layout.placements;
+  return slotPhotos(layout).map((photo, index) => ({
+    photo,
+    kind: "id",
+    x: layout.startX + (index % layout.cols) * (layout.photoW + layout.gap),
+    y: layout.startY + Math.floor(index / layout.cols) * (layout.photoH + layout.gap),
+    w: layout.photoW,
+    h: layout.photoH
+  }));
+}
+
+function drawPlacement(ctx, placement, scale = 1) {
+  const draw = placement.kind === "large" ? drawLargeCropped : drawCropped;
+  draw(ctx, placement.photo, placement.x * scale, placement.y * scale, placement.w * scale, placement.h * scale);
+}
+
 function renderSheet() {
   const layout = calculateLayout();
   state.layout = layout;
@@ -254,18 +300,14 @@ function renderSheet() {
   sheetCanvas.height = Math.max(1, Math.round(layout.paperH * previewScale));
   sheetCtx.fillStyle = "#fff";
   sheetCtx.fillRect(0, 0, sheetCanvas.width, sheetCanvas.height);
-  const slots = slotPhotos(layout);
-  slots.forEach((photo, index) => {
-    const col = index % layout.cols;
-    const row = Math.floor(index / layout.cols);
-    const x = (layout.startX + col * (layout.photoW + layout.gap)) * previewScale;
-    const y = (layout.startY + row * (layout.photoH + layout.gap)) * previewScale;
-    drawCropped(sheetCtx, photo, x, y, layout.photoW * previewScale, layout.photoH * previewScale);
-    if ($("cutMarks").checked) drawPreviewMarks(sheetCtx, x, y, layout.photoW * previewScale, layout.photoH * previewScale, previewScale);
+  const placements = layoutPlacements(layout);
+  placements.forEach(placement => {
+    drawPlacement(sheetCtx, placement, previewScale);
+    if ($("cutMarks").checked) drawPreviewMarks(sheetCtx, placement.x * previewScale, placement.y * previewScale, placement.w * previewScale, placement.h * previewScale, previewScale);
   });
-  $("sheetEmpty").hidden = slots.length > 0;
-  $("capacityBadge").textContent = `${layout.capacity} emplacement${layout.capacity > 1 ? "s" : ""}`;
-  $("downloadPdf").disabled = slots.length === 0;
+  $("sheetEmpty").hidden = placements.length > 0;
+  $("capacityBadge").textContent = layout.mixed ? "2 grands + 15 ID" : `${layout.capacity} emplacement${layout.capacity > 1 ? "s" : ""}`;
+  $("downloadPdf").disabled = placements.length === 0;
   if (state.photos.length && !layout.capacity) setStatus("Ce format de photo ne tient pas sur le papier avec les marges choisies.");
   else setStatus("");
 }
@@ -284,7 +326,20 @@ function drawPreviewMarks(ctx, x, y, w, h, scale) {
 }
 
 function refreshAll() {
-  $("groupBySource").disabled = !$("autoFill").checked;
+  const mixed = $("layoutMode").value === "mixed-a4";
+  $("photoFormat").disabled = mixed;
+  $("paperFormat").disabled = mixed;
+  $("autoFill").disabled = mixed;
+  $("groupBySource").disabled = mixed || !$("autoFill").checked;
+  $("margin").disabled = mixed;
+  $("gap").disabled = mixed;
+  $("mixedLayoutHint").hidden = !mixed;
+  if (mixed) {
+    $("photoFormat").value = "35x45";
+    $("paperFormat").value = "210x297";
+    $("customPhotoSize").hidden = true;
+    $("customPaperSize").hidden = true;
+  }
   renderPhotoList();
   const photo = activePhoto();
   $("cropPlaceholder").hidden = Boolean(photo);
@@ -350,16 +405,21 @@ cropCanvas.addEventListener("wheel", event => {
   setZoom(next);
 }, { passive: false });
 
-function cropToJpeg(photo) {
-  const targetW = Math.max(240, Math.round(state.photoSize.w / 25.4 * 300));
-  const targetH = Math.max(240, Math.round(state.photoSize.h / 25.4 * 300));
+function placementKey(placement) {
+  return `${placement.photo.id}:${placement.kind}:${placement.w}x${placement.h}`;
+}
+
+function cropToJpeg(placement) {
+  const targetW = Math.max(240, Math.round(placement.w / 25.4 * 300));
+  const targetH = Math.max(240, Math.round(placement.h / 25.4 * 300));
   const canvas = document.createElement("canvas");
   canvas.width = targetW;
   canvas.height = targetH;
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  drawCropped(ctx, photo, 0, 0, targetW, targetH);
+  const draw = placement.kind === "large" ? drawLargeCropped : drawCropped;
+  draw(ctx, placement.photo, 0, 0, targetW, targetH);
   const data = canvas.toDataURL("image/jpeg", .94).split(",")[1];
   const binary = atob(data);
   const bytes = new Uint8Array(binary.length);
@@ -367,7 +427,7 @@ function cropToJpeg(photo) {
   return { bytes, width: targetW, height: targetH };
 }
 
-function buildPdf(layout, slots) {
+function buildPdf(layout, placements) {
   const enc = new TextEncoder();
   const parts = [];
   const offsets = [0];
@@ -376,7 +436,7 @@ function buildPdf(layout, slots) {
   const pushText = value => pushBytes(enc.encode(value));
   pushBytes(new Uint8Array([0x25,0x50,0x44,0x46,0x2d,0x31,0x2e,0x34,0x0a,0x25,0xe2,0xe3,0xcf,0xd3,0x0a]));
 
-  const unique = [...new Map(slots.map(photo => [photo.id, photo])).values()];
+  const unique = [...new Map(placements.map(placement => [placementKey(placement), placement])).values()];
   const imageData = unique.map(cropToJpeg);
   const imageObjectStart = 5;
   const objectCount = 4 + unique.length;
@@ -390,15 +450,12 @@ function buildPdf(layout, slots) {
   beginObject(3); pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pt(layout.paperW).toFixed(4)} ${pt(layout.paperH).toFixed(4)}] /Resources << /XObject << ${resources} >> >> /Contents 4 0 R >>\n`); endObject();
 
   const commands = [];
-  slots.forEach((photo, index) => {
-    const col = index % layout.cols;
-    const row = Math.floor(index / layout.cols);
-    const x = pt(layout.startX + col * (layout.photoW + layout.gap));
-    const top = layout.startY + row * (layout.photoH + layout.gap);
-    const y = pt(layout.paperH - top - layout.photoH);
-    const w = pt(layout.photoW);
-    const h = pt(layout.photoH);
-    const imageIndex = unique.findIndex(candidate => candidate.id === photo.id) + 1;
+  placements.forEach(placement => {
+    const x = pt(placement.x);
+    const y = pt(layout.paperH - placement.y - placement.h);
+    const w = pt(placement.w);
+    const h = pt(placement.h);
+    const imageIndex = unique.findIndex(candidate => placementKey(candidate) === placementKey(placement)) + 1;
     commands.push(`q ${w.toFixed(4)} 0 0 ${h.toFixed(4)} ${x.toFixed(4)} ${y.toFixed(4)} cm /Im${imageIndex} Do Q`);
     if ($("cutMarks").checked) commands.push(...pdfCutMarks(x, y, w, h));
   });
@@ -434,17 +491,17 @@ function pdfCutMarks(x, y, w, h) {
 
 function downloadPdf() {
   const layout = calculateLayout();
-  const slots = slotPhotos(layout);
-  if (!slots.length) return;
+  const placements = layoutPlacements(layout);
+  if (!placements.length) return;
   setStatus("Préparation du PDF…", false);
   requestAnimationFrame(() => {
     try {
-      const pdf = buildPdf(layout, slots);
+      const pdf = buildPdf(layout, placements);
       const blob = new Blob([pdf], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `planche-photo-id-${layout.photoW}x${layout.photoH}mm-${layout.paperW}x${layout.paperH}mm.pdf`;
+      anchor.download = layout.mixed ? "planche-photo-mixte-a4.pdf" : `planche-photo-id-${layout.photoW}x${layout.photoH}mm-${layout.paperW}x${layout.paperH}mm.pdf`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setStatus("PDF généré. Impression : taille réelle, 100 %.", false);
@@ -469,6 +526,12 @@ $("dropZone").addEventListener("drop", event => addFiles(event.dataTransfer.file
 $("zoomRange").addEventListener("input", event => setZoom(event.target.value));
 $("resetCrop").addEventListener("click", () => { const photo = activePhoto(); if (photo) { ensureCropState(photo, true); refreshAll(); } });
 $("downloadPdf").addEventListener("click", downloadPdf);
+
+$("layoutMode").addEventListener("change", () => {
+  readSizes();
+  state.photos.forEach(photo => ensureCropState(photo, true));
+  refreshAll();
+});
 
 $("photoFormat").addEventListener("change", () => {
   $("customPhotoSize").hidden = $("photoFormat").value !== "custom";
