@@ -40,6 +40,10 @@
         <div><span class="step">2</span><h2 id="crop-title">Cadrage</h2></div>
         <button id="resetCrop" class="text-button" type="button" disabled>Recentrer</button>
       </div>
+      <div id="cropModeControls" class="crop-mode-controls" hidden aria-label="Format à cadrer">
+        <button id="cropModeId" type="button" data-crop-mode="id" aria-pressed="true">Photo ID</button>
+        <button id="cropModeLarge" type="button" data-crop-mode="large" aria-pressed="false">10 × 15</button>
+      </div>
       <div class="crop-stage" id="cropStage">
         <canvas id="cropCanvas" width="700" height="900" aria-label="Zone de cadrage de la photo"></canvas>
         <div id="cropPlaceholder" class="canvas-placeholder">
@@ -52,7 +56,7 @@
         <input id="zoomRange" type="range" min="1" max="5" value="1" step="0.01" disabled>
         <output id="zoomValue" for="zoomRange">100 %</output>
       </div>
-      <div class="guide-legend">
+      <div id="guideLegend" class="guide-legend">
         <span><i class="line eye"></i>Ligne des yeux</span>
         <span><i class="line face"></i>Hauteur du visage 32–36 mm</span>
       </div>
