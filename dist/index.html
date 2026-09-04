@@ -65,6 +65,12 @@
       </div>
 
       <div class="settings-grid">
+        <label>Disposition
+          <select id="layoutMode">
+            <option value="identity">Photos d’identité</option>
+            <option value="mixed-a4">A4 mixte · 2 photos 10 × 15 + ID</option>
+          </select>
+        </label>
         <label>Format photo
           <select id="photoFormat">
             <option value="35x45">France · 35 × 45 mm</option>
@@ -83,6 +89,8 @@
           </select>
         </label>
       </div>
+
+      <p id="mixedLayoutHint" class="layout-hint" hidden>Les deux premières sources sont imprimées en 10 × 15 cm. Les 15 photos ID sont réparties entre toutes les sources.</p>
 
       <div id="customPhotoSize" class="custom-size" hidden>
         <label>Largeur <input id="photoWidth" type="number" min="15" max="100" value="35"> mm</label>

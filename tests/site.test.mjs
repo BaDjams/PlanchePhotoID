@@ -17,7 +17,7 @@ test("l’application ne charge aucune ressource distante", () => {
 });
 
 test("les contrôles du parcours principal sont présents", () => {
-  for (const id of ["photoInput", "cropCanvas", "zoomRange", "photoFormat", "paperFormat", "sheetCanvas", "downloadPdf"]) {
+  for (const id of ["photoInput", "cropCanvas", "zoomRange", "layoutMode", "photoFormat", "paperFormat", "sheetCanvas", "downloadPdf"]) {
     assert.match(html, new RegExp(`id=["']${id}["']`));
   }
 });
@@ -75,4 +75,37 @@ test("le remplissage alterné reste disponible", () => {
   const photos = [{ id: "image-1" }, { id: "image-2" }];
   const result = sandbox.PhotoLayout.arrangePhotos(photos, 5, { autoFill: true, groupBySource: false });
   assert.deepEqual(Array.from(result, photo => photo.id), ["image-1", "image-2", "image-1", "image-2", "image-1"]);
+});
+
+test("la disposition mixte A4 place deux 10 × 15 et maximise à quinze photos ID", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const photos = [{ id: "image-1" }, { id: "image-2" }, { id: "image-3" }];
+  const layout = sandbox.PhotoLayout.buildMixedA4Layout(photos);
+  const large = Array.from(layout.placements).filter(placement => placement.kind === "large");
+  const ids = Array.from(layout.placements).filter(placement => placement.kind === "id");
+  assert.deepEqual(large.map(placement => placement.photo.id), ["image-1", "image-2"]);
+  assert.ok(large.every(placement => placement.w === 100 && placement.h === 150));
+  assert.equal(ids.length, 15);
+  assert.deepEqual(ids.map(placement => placement.photo.id), [
+    ...Array(5).fill("image-1"),
+    ...Array(5).fill("image-2"),
+    ...Array(5).fill("image-3")
+  ]);
+});
+
+test("la disposition mixte répartit les restes entre toutes les sources", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const photos = [1, 2, 3, 4].map(id => ({ id: `image-${id}` }));
+  const layout = sandbox.PhotoLayout.buildMixedA4Layout(photos);
+  const ids = Array.from(layout.placements).filter(placement => placement.kind === "id");
+  assert.deepEqual(ids.map(placement => placement.photo.id), [
+    ...Array(4).fill("image-1"),
+    ...Array(4).fill("image-2"),
+    ...Array(4).fill("image-3"),
+    ...Array(3).fill("image-4")
+  ]);
+  assert.ok(layout.placements.every(placement => placement.x >= 0 && placement.y >= 0));
+  assert.ok(layout.placements.every(placement => placement.x + placement.w <= 210 && placement.y + placement.h <= 297));
 });

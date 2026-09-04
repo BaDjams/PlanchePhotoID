@@ -10,6 +10,7 @@ Application web gratuite permettant de recadrer une ou plusieurs photos d’iden
 - formats photo français 35 × 45 mm, américain 51 × 51 mm et personnalisés ;
 - papiers A4, A5, A6, 10 × 15 cm et personnalisés ;
 - remplissage automatique alterné ou groupé par photo d’origine, marges, espacement et traits de découpe ;
+- disposition A4 mixte avec deux tirages 10 × 15 cm et quinze photos d’identité réparties entre toutes les sources ;
 - PDF généré directement dans le navigateur ;
 - application installable et utilisable hors connexion après la première visite.
 
