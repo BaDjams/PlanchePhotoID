@@ -37,7 +37,7 @@ function ensureCropState(photo, reset = false) {
       y: (height - photo.image.naturalHeight * base) / 2
     };
   }
-  photo.crop.zoom = Math.max(1, Math.min(3, photo.crop.zoom));
+  photo.crop.zoom = Math.max(1, Math.min(5, photo.crop.zoom));
   clampCrop(photo);
 }
 
@@ -349,7 +349,7 @@ cropCanvas.addEventListener("pointercancel", () => { state.dragging = false; });
 cropCanvas.addEventListener("wheel", event => {
   if (!activePhoto()) return;
   event.preventDefault();
-  const next = Math.max(1, Math.min(3, Number($("zoomRange").value) + (event.deltaY < 0 ? .08 : -.08)));
+  const next = Math.max(1, Math.min(5, Number($("zoomRange").value) + (event.deltaY < 0 ? .08 : -.08)));
   $("zoomRange").value = next;
   setZoom(next);
 }, { passive: false });
