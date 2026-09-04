@@ -27,6 +27,12 @@ test("le cadrage autorise un zoom maximal de 500 %", () => {
   assert.match(app, /Math\.min\(5, photo\[property\]\.zoom\)/);
 });
 
+test("le cadre visuel suit les proportions du format sélectionné", () => {
+  assert.match(app, /cropStage.*style\.aspectRatio/);
+  assert.match(app, /cropDimensions\(mode = state\.cropMode\)/);
+  assert.match(app, /mode === "large".*height: 1050/);
+});
+
 test("les panneaux masqués ne peuvent pas recouvrir le cadrage", () => {
   assert.match(styles, /\[hidden\]\s*\{\s*display:\s*none\s*!important;/);
   assert.match(app, /cropPlaceholder.*hidden\s*=\s*Boolean\(photo\)/);
@@ -51,6 +57,10 @@ test("la web app est installable en mode autonome", () => {
 test("une correction remplace immédiatement l’ancien cache", () => {
   assert.match(serviceWorker, /skipWaiting\(\)/);
   assert.match(serviceWorker, /clients\.claim\(\)/);
+  assert.match(serviceWorker, /event\.request\.mode === "navigate"/);
+  assert.doesNotMatch(serviceWorker, /caches\.match\(event\.request\)/);
+  assert.match(html, /app\.js\?v=8/);
+  assert.match(app, /updateViaCache:\s*"none"/);
 });
 
 test("GitHub Pages ouvre l’application depuis la racine", () => {
