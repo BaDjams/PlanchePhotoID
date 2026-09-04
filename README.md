@@ -9,7 +9,7 @@ Application web gratuite permettant de recadrer une ou plusieurs photos d’iden
 - cadrage tactile ou à la souris, avec zoom et guides visuels ;
 - formats photo français 35 × 45 mm, américain 51 × 51 mm et personnalisés ;
 - papiers A4, A5, A6, 10 × 15 cm et personnalisés ;
-- remplissage automatique, marges, espacement et traits de découpe ;
+- remplissage automatique alterné ou groupé par photo d’origine, marges, espacement et traits de découpe ;
 - PDF généré directement dans le navigateur ;
 - application installable et utilisable hors connexion après la première visite.
 

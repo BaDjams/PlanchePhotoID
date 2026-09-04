@@ -1,5 +1,5 @@
-const CACHE = "planche-photo-id-v4";
-const ASSETS = ["./", "index.html", "styles.css", "app.js", "icon.svg", "manifest.webmanifest"];
+const CACHE = "planche-photo-id-v5";
+const ASSETS = ["./", "index.html", "styles.css", "layout.js", "app.js", "icon.svg", "manifest.webmanifest"];
 self.addEventListener("install", event => event.waitUntil(
   caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
 ));

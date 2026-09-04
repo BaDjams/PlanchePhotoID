@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import vm from "node:vm";
 
 const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const app = await readFile(new URL("../dist/app.js", import.meta.url), "utf8");
@@ -8,6 +9,7 @@ const styles = await readFile(new URL("../dist/styles.css", import.meta.url), "u
 const manifest = JSON.parse(await readFile(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"));
 const serviceWorker = await readFile(new URL("../dist/sw.js", import.meta.url), "utf8");
 const rootPage = await readFile(new URL("../index.html", import.meta.url), "utf8");
+const layoutSource = await readFile(new URL("../dist/layout.js", import.meta.url), "utf8");
 
 test("l’application ne charge aucune ressource distante", () => {
   assert.doesNotMatch(html, /(?:src|href)=["']https?:\/\//i);
@@ -54,4 +56,23 @@ test("une correction remplace immédiatement l’ancien cache", () => {
 test("GitHub Pages ouvre l’application depuis la racine", () => {
   assert.match(rootPage, /location\.replace\("dist\/"/);
   assert.match(rootPage, /url=dist\//);
+});
+
+test("le remplissage groupé conserve chaque photo dans un bloc contigu", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const photos = [{ id: "image-1" }, { id: "image-2" }];
+  const result = sandbox.PhotoLayout.arrangePhotos(photos, 25, { autoFill: true, groupBySource: true });
+  assert.deepEqual(Array.from(result, photo => photo.id), [
+    ...Array(13).fill("image-1"),
+    ...Array(12).fill("image-2")
+  ]);
+});
+
+test("le remplissage alterné reste disponible", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const photos = [{ id: "image-1" }, { id: "image-2" }];
+  const result = sandbox.PhotoLayout.arrangePhotos(photos, 5, { autoFill: true, groupBySource: false });
+  assert.deepEqual(Array.from(result, photo => photo.id), ["image-1", "image-2", "image-1", "image-2", "image-1"]);
 });

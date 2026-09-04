@@ -230,15 +230,10 @@ function calculateLayout() {
 }
 
 function slotPhotos(layout) {
-  if (!state.photos.length || !layout.capacity) return [];
-  if ($("autoFill").checked) {
-    return Array.from({ length: layout.capacity }, (_, index) => state.photos[index % state.photos.length]);
-  }
-  const result = [];
-  state.photos.forEach(photo => {
-    for (let i = 0; i < photo.copies && result.length < layout.capacity; i += 1) result.push(photo);
+  return window.PhotoLayout.arrangePhotos(state.photos, layout.capacity, {
+    autoFill: $("autoFill").checked,
+    groupBySource: $("groupBySource").checked
   });
-  return result;
 }
 
 function drawCropped(ctx, photo, x, y, width, height) {
@@ -289,6 +284,7 @@ function drawPreviewMarks(ctx, x, y, w, h, scale) {
 }
 
 function refreshAll() {
+  $("groupBySource").disabled = !$("autoFill").checked;
   renderPhotoList();
   const photo = activePhoto();
   $("cropPlaceholder").hidden = Boolean(photo);
@@ -482,7 +478,7 @@ $("photoFormat").addEventListener("change", () => {
 });
 $("paperFormat").addEventListener("change", () => { $("customPaperSize").hidden = $("paperFormat").value !== "custom"; refreshAll(); });
 ["photoWidth","photoHeight"].forEach(id => $(id).addEventListener("input", () => { readSizes(); state.photos.forEach(photo => ensureCropState(photo, true)); refreshAll(); }));
-["paperWidth","paperHeight","autoFill","cutMarks","margin","gap"].forEach(id => $(id).addEventListener("input", refreshAll));
+["paperWidth","paperHeight","autoFill","groupBySource","cutMarks","margin","gap"].forEach(id => $(id).addEventListener("input", refreshAll));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
