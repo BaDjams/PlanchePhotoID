@@ -561,7 +561,11 @@ $("paperFormat").addEventListener("change", () => { $("customPaperSize").hidden 
 ["paperWidth","paperHeight","autoFill","groupBySource","cutMarks","margin","gap"].forEach(id => $(id).addEventListener("input", refreshAll));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js?v=8", { updateViaCache: "none" })
+      .then(registration => registration.update())
+      .catch(() => {});
+  });
 }
 
 refreshAll();
