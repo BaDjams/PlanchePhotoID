@@ -24,7 +24,7 @@ test("les contrôles du parcours principal sont présents", () => {
 
 test("le cadrage autorise un zoom maximal de 500 %", () => {
   assert.match(html, /id="zoomRange"[^>]*max="5"/);
-  assert.match(app, /Math\.min\(5, photo\.crop\.zoom\)/);
+  assert.match(app, /Math\.min\(5, photo\[property\]\.zoom\)/);
 });
 
 test("les panneaux masqués ne peuvent pas recouvrir le cadrage", () => {
@@ -108,4 +108,12 @@ test("la disposition mixte répartit les restes entre toutes les sources", () =>
   ]);
   assert.ok(layout.placements.every(placement => placement.x >= 0 && placement.y >= 0));
   assert.ok(layout.placements.every(placement => placement.x + placement.w <= 210 && placement.y + placement.h <= 297));
+});
+
+test("les tirages 10 × 15 disposent d’un cadrage indépendant", () => {
+  assert.match(html, /id="cropModeId"[^>]*data-crop-mode="id"/);
+  assert.match(html, /id="cropModeLarge"[^>]*data-crop-mode="large"/);
+  assert.match(app, /largeCrop:\s*null/);
+  assert.match(app, /drawCropped\(ctx, photo, x, y, width, height, "large"\)/);
+  assert.match(app, /mode === "large" \? "largeCrop" : "crop"/);
 });
