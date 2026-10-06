@@ -589,9 +589,7 @@ function downloadPdf() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = layout.mixed ? "planche-photo-mixte-a4.pdf"
-        : layout.exact ? `impression-exacte-${layout.photoW}x${layout.photoH}mm-${layout.paper.name.replace(/\s+/g, "-")}.pdf`
-        : `planche-photo-id-${layout.photoW}x${layout.photoH}mm-${layout.paperW}x${layout.paperH}mm.pdf`;
+      anchor.download = window.PhotoLayout.printFileName(layout);
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setStatus("PDF généré. Impression : taille réelle, 100 %.", false);
@@ -645,7 +643,7 @@ $("paperSeries").addEventListener("change", refreshAll);
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js?v=10", { updateViaCache: "none" })
+    navigator.serviceWorker.register("sw.js?v=11", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {});
   });

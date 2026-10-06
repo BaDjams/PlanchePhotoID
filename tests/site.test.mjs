@@ -59,7 +59,7 @@ test("une correction remplace immédiatement l’ancien cache", () => {
   assert.match(serviceWorker, /clients\.claim\(\)/);
   assert.match(serviceWorker, /event\.request\.mode === "navigate"/);
   assert.doesNotMatch(serviceWorker, /caches\.match\(event\.request\)/);
-  assert.match(html, /app\.js\?v=10/);
+  assert.match(html, /app\.js\?v=11/);
   assert.match(app, /updateViaCache:\s*"none"/);
 });
 
@@ -175,4 +175,30 @@ test("le PDF embarque les préréglages d’impression", () => {
   assert.match(app, /\/PickTrayByPDFSize true/);
   assert.match(app, /\/TrimBox/);
   assert.match(app, /0x2e,0x37,0x0a/);
+});
+
+test("le nom du PDF porte les consignes d’impression", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const { printFileName, buildExactLayout, buildMixedA4Layout } = sandbox.PhotoLayout;
+  assert.equal(
+    printFileName(buildExactLayout({ id: "image-1" }, { width: 123.4, height: 290, series: "A", margin: 8 })),
+    "imprimer-sur-A3-portrait-taille-reelle-100-recto_decouper-aux-traits-123,4x290mm.pdf"
+  );
+  assert.equal(
+    printFileName(buildExactLayout({ id: "image-1" }, { width: 400, height: 250, series: "ARCH", margin: 8 })),
+    "imprimer-sur-ARCH-B-paysage-taille-reelle-100-recto_decouper-aux-traits-400x250mm.pdf"
+  );
+  assert.equal(
+    printFileName(buildMixedA4Layout([{ id: "image-1" }])),
+    "imprimer-sur-A4-portrait-taille-reelle-100-recto_planche-mixte-10x15-et-ID-35x45mm.pdf"
+  );
+  assert.equal(
+    printFileName({ paperW: 150, paperH: 100, photoW: 35, photoH: 45 }),
+    "imprimer-sur-10x15cm-paysage-taille-reelle-100-recto_planche-ID-35x45mm.pdf"
+  );
+  assert.equal(
+    printFileName({ paperW: 200, paperH: 250.5, photoW: 51, photoH: 51 }),
+    "imprimer-sur-papier-200x250,5mm-portrait-taille-reelle-100-recto_planche-ID-51x51mm.pdf"
+  );
 });

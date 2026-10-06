@@ -160,5 +160,30 @@
     };
   }
 
-  root.PhotoLayout = { arrangePhotos, buildMixedA4Layout, choosePaper, buildExactLayout, PAPER_SERIES };
+  function formatMm(value) {
+    return String(Math.round(Number(value) * 10) / 10).replace(".", ",");
+  }
+
+  function paperLabel(paperW, paperH) {
+    const short = Math.min(paperW, paperH);
+    const long = Math.max(paperW, paperH);
+    const same = (a, b) => Math.abs(a - b) < 0.05;
+    const known = [...PAPER_SERIES.A, ...PAPER_SERIES.ARCH, { name: "10x15cm", w: 100, h: 150 }]
+      .find(sheet => same(sheet.w, short) && same(sheet.h, long));
+    return known ? known.name.replace(/\s+/g, "-") : `papier-${formatMm(paperW)}x${formatMm(paperH)}mm`;
+  }
+
+  // Nom de fichier portant les consignes d’impression : papier, orientation,
+  // échelle, recto, puis contenu.
+  function printFileName(layout) {
+    const paper = layout.paper ? layout.paper.name.replace(/\s+/g, "-") : paperLabel(layout.paperW, layout.paperH);
+    const orientation = layout.paperW > layout.paperH ? "paysage" : "portrait";
+    const instructions = `imprimer-sur-${paper}-${orientation}-taille-reelle-100-recto`;
+    const size = `${formatMm(layout.photoW)}x${formatMm(layout.photoH)}mm`;
+    if (layout.exact) return `${instructions}_decouper-aux-traits-${size}.pdf`;
+    if (layout.mixed) return `${instructions}_planche-mixte-10x15-et-ID-${size}.pdf`;
+    return `${instructions}_planche-ID-${size}.pdf`;
+  }
+
+  root.PhotoLayout = { arrangePhotos, buildMixedA4Layout, choosePaper, buildExactLayout, printFileName, PAPER_SERIES };
 })(typeof self !== "undefined" ? self : this);
