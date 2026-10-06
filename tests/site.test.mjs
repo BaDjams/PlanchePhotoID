@@ -59,7 +59,7 @@ test("une correction remplace immédiatement l’ancien cache", () => {
   assert.match(serviceWorker, /clients\.claim\(\)/);
   assert.match(serviceWorker, /event\.request\.mode === "navigate"/);
   assert.doesNotMatch(serviceWorker, /caches\.match\(event\.request\)/);
-  assert.match(html, /app\.js\?v=8/);
+  assert.match(html, /app\.js\?v=9/);
   assert.match(app, /updateViaCache:\s*"none"/);
 });
 
@@ -126,4 +126,46 @@ test("les tirages 10 × 15 disposent d’un cadrage indépendant", () => {
   assert.match(app, /largeCrop:\s*null/);
   assert.match(app, /drawCropped\(ctx, photo, x, y, width, height, "large"\)/);
   assert.match(app, /mode === "large" \? "largeCrop" : "crop"/);
+});
+
+test("l’impression exacte choisit le format A immédiatement supérieur", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const { choosePaper } = sandbox.PhotoLayout;
+  assert.equal(choosePaper(200, 280, "A", 5).name, "A4");
+  assert.equal(choosePaper(200, 290, "A", 5).name, "A3");
+  assert.equal(choosePaper(210, 297, "A", 0).name, "A4");
+  assert.equal(choosePaper(90, 130, "A", 5).name, "A6");
+  assert.equal(choosePaper(900, 1300, "A", 5), null);
+});
+
+test("l’impression exacte gère la série ARCH et l’orientation paysage", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const { choosePaper } = sandbox.PhotoLayout;
+  assert.equal(choosePaper(200, 280, "ARCH", 5).name, "ARCH A");
+  assert.equal(choosePaper(600, 900, "ARCH", 5).name, "ARCH E1");
+  const landscape = choosePaper(400, 250, "ARCH", 8);
+  assert.equal(landscape.name, "ARCH B");
+  assert.ok(landscape.landscape);
+  assert.ok(Math.abs(landscape.w - 457.2) < 1e-9 && Math.abs(landscape.h - 304.8) < 1e-9);
+});
+
+test("l’image exacte est centrée à ses dimensions précises", () => {
+  const sandbox = {};
+  vm.runInNewContext(layoutSource, sandbox);
+  const layout = sandbox.PhotoLayout.buildExactLayout({ id: "image-1" }, { width: 123.4, height: 290, series: "A", margin: 8 });
+  assert.equal(layout.paper.name, "A3");
+  assert.equal(layout.placements.length, 1);
+  const [placement] = layout.placements;
+  assert.equal(placement.w, 123.4);
+  assert.equal(placement.h, 290);
+  assert.ok(Math.abs(placement.x * 2 + placement.w - 297) < 1e-9);
+  assert.ok(Math.abs(placement.y * 2 + placement.h - 420) < 1e-9);
+});
+
+test("le mode d’impression exacte est proposé", () => {
+  assert.match(html, /<option value="exact">/);
+  for (const id of ["exactWidth", "exactHeight", "paperSeries"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /<option value="ARCH">/);
 });

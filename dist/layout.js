@@ -90,5 +90,75 @@
     };
   }
 
-  root.PhotoLayout = { arrangePhotos, buildMixedA4Layout };
+  const inch = 25.4;
+  const PAPER_SERIES = {
+    A: [
+      { name: "A6", w: 105, h: 148 },
+      { name: "A5", w: 148, h: 210 },
+      { name: "A4", w: 210, h: 297 },
+      { name: "A3", w: 297, h: 420 },
+      { name: "A2", w: 420, h: 594 },
+      { name: "A1", w: 594, h: 841 },
+      { name: "A0", w: 841, h: 1189 }
+    ],
+    ARCH: [
+      { name: "ARCH A", w: 9 * inch, h: 12 * inch },
+      { name: "ARCH B", w: 12 * inch, h: 18 * inch },
+      { name: "ARCH C", w: 18 * inch, h: 24 * inch },
+      { name: "ARCH D", w: 24 * inch, h: 36 * inch },
+      { name: "ARCH E1", w: 30 * inch, h: 42 * inch },
+      { name: "ARCH E", w: 36 * inch, h: 48 * inch }
+    ]
+  };
+
+  // Plus petit format de la série pouvant contenir l’image et sa marge blanche,
+  // orienté comme l’image.
+  function choosePaper(imageW, imageH, series = "A", margin = 0) {
+    const sheets = PAPER_SERIES[series] || PAPER_SERIES.A;
+    const border = 2 * Math.max(0, Number(margin) || 0);
+    const long = Math.max(imageW, imageH) + border;
+    const short = Math.min(imageW, imageH) + border;
+    const sheet = sheets.find(candidate => long <= candidate.h + 1e-9 && short <= candidate.w + 1e-9);
+    if (!sheet) return null;
+    const landscape = imageW > imageH;
+    return {
+      name: sheet.name,
+      w: landscape ? sheet.h : sheet.w,
+      h: landscape ? sheet.w : sheet.h,
+      landscape
+    };
+  }
+
+  function buildExactLayout(photo, options = {}) {
+    const width = Number(options.width);
+    const height = Number(options.height);
+    const margin = Math.max(0, Number(options.margin) || 0);
+    const valid = width > 0 && height > 0;
+    const paper = valid ? choosePaper(width, height, options.series, margin) : null;
+    const sheets = PAPER_SERIES[options.series] || PAPER_SERIES.A;
+    const fallback = sheets[sheets.length - 1];
+    const paperW = paper ? paper.w : fallback.w;
+    const paperH = paper ? paper.h : fallback.h;
+    const placements = paper && photo ? [{
+      photo,
+      kind: "id",
+      x: (paperW - width) / 2,
+      y: (paperH - height) / 2,
+      w: width,
+      h: height
+    }] : [];
+    return {
+      exact: true,
+      paper,
+      paperW,
+      paperH,
+      photoW: width,
+      photoH: height,
+      margin,
+      capacity: paper ? 1 : 0,
+      placements
+    };
+  }
+
+  root.PhotoLayout = { arrangePhotos, buildMixedA4Layout, choosePaper, buildExactLayout, PAPER_SERIES };
 })(typeof self !== "undefined" ? self : this);

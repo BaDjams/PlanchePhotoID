@@ -25,10 +25,20 @@ function cropProperty(mode = state.cropMode) {
   return mode === "large" ? "largeCrop" : "crop";
 }
 
+function layoutMode() {
+  return $("layoutMode").value;
+}
+
+function cropRatio(mode = state.cropMode) {
+  return mode === "large" ? 1.5 : state.photoSize.h / state.photoSize.w;
+}
+
 function cropDimensions(mode = state.cropMode) {
   const width = 700;
   if (mode === "large") return { width, height: 1050 };
-  return { width, height: Math.round(width * state.photoSize.h / state.photoSize.w) };
+  const ratio = cropRatio(mode);
+  if (ratio > 1.5) return { width: Math.max(1, Math.round(1050 / ratio)), height: 1050 };
+  return { width, height: Math.max(1, Math.round(width * ratio)) };
 }
 
 function ensureCropState(photo, reset = false, mode = state.cropMode) {
@@ -77,7 +87,7 @@ function renderCrop() {
   const scale = cropScale(photo, mode);
   cropCtx.drawImage(photo.image, crop.x, crop.y, photo.image.naturalWidth * scale, photo.image.naturalHeight * scale);
 
-  if (mode === "large") return;
+  if (mode === "large" || layoutMode() === "exact") return;
 
   cropCtx.save();
   cropCtx.fillStyle = "rgba(7, 24, 34, .28)";
@@ -165,7 +175,7 @@ function renderPhotoList() {
     copyInput.min = "0";
     copyInput.max = "99";
     copyInput.value = photo.copies;
-    copyInput.disabled = $("autoFill").checked || $("layoutMode").value === "mixed-a4";
+    copyInput.disabled = $("autoFill").checked || layoutMode() !== "identity";
     copyInput.setAttribute("aria-label", `Nombre de copies de ${photo.name}`);
     copyInput.addEventListener("click", event => event.stopPropagation());
     copyInput.addEventListener("keydown", event => event.stopPropagation());
@@ -205,7 +215,11 @@ function renderPhotoList() {
 }
 
 function readSizes() {
-  if ($("layoutMode").value === "mixed-a4") {
+  if (layoutMode() === "exact") {
+    state.photoSize = { w: positiveValue("exactWidth", 200), h: positiveValue("exactHeight", 300) };
+    return;
+  }
+  if (layoutMode() === "mixed-a4") {
     state.photoSize = { w: 35, h: 45 };
     state.paperSize = { w: 210, h: 297 };
     return;
@@ -229,9 +243,24 @@ function numberValue(id, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function positiveValue(id, fallback) {
+  const value = numberValue(id, fallback);
+  return value > 0 ? value : fallback;
+}
+
 function calculateLayout() {
   readSizes();
-  if ($("layoutMode").value === "mixed-a4") return window.PhotoLayout.buildMixedA4Layout(state.photos);
+  if (layoutMode() === "mixed-a4") return window.PhotoLayout.buildMixedA4Layout(state.photos);
+  if (layoutMode() === "exact") {
+    const layout = window.PhotoLayout.buildExactLayout(activePhoto() || state.photos[0] || null, {
+      width: state.photoSize.w,
+      height: state.photoSize.h,
+      series: $("paperSeries").value,
+      margin: Math.max(0, numberValue("margin", 8))
+    });
+    state.paperSize = { w: layout.paperW, h: layout.paperH };
+    return layout;
+  }
   const margin = Math.max(0, numberValue("margin", 8));
   const gap = Math.max(0, numberValue("gap", 3));
   const { w: paperW, h: paperH } = state.paperSize;
@@ -256,10 +285,11 @@ function drawCropped(ctx, photo, x, y, width, height, mode = "id") {
   const crop = photo[cropProperty(mode)];
   const dims = cropDimensions(mode);
   const scale = cropScale(photo, mode);
-  const sourceX = -crop.x / scale;
-  const sourceY = -crop.y / scale;
-  const sourceW = dims.width / scale;
-  const sourceH = dims.height / scale;
+  // La zone source suit le ratio exact du format, sans l’arrondi du canevas de cadrage.
+  const sourceW = Math.min(photo.image.naturalWidth, dims.width / scale);
+  const sourceH = Math.min(photo.image.naturalHeight, sourceW * cropRatio(mode));
+  const sourceX = Math.max(0, Math.min(photo.image.naturalWidth - sourceW, -crop.x / scale));
+  const sourceY = Math.max(0, Math.min(photo.image.naturalHeight - sourceH, -crop.y / scale));
   ctx.drawImage(photo.image, sourceX, sourceY, sourceW, sourceH, x, y, width, height);
 }
 
@@ -268,7 +298,7 @@ function drawLargeCropped(ctx, photo, x, y, width, height) {
 }
 
 function layoutPlacements(layout) {
-  if (layout.mixed) return layout.placements;
+  if (layout.placements) return layout.placements;
   return slotPhotos(layout).map((photo, index) => ({
     photo,
     kind: "id",
@@ -298,10 +328,32 @@ function renderSheet() {
     if ($("cutMarks").checked) drawPreviewMarks(sheetCtx, placement.x * previewScale, placement.y * previewScale, placement.w * previewScale, placement.h * previewScale, previewScale);
   });
   $("sheetEmpty").hidden = placements.length > 0;
-  $("capacityBadge").textContent = layout.mixed ? "2 grands + 15 ID" : `${layout.capacity} emplacement${layout.capacity > 1 ? "s" : ""}`;
+  $("capacityBadge").textContent = layout.mixed ? "2 grands + 15 ID"
+    : layout.exact ? (layout.paper ? layout.paper.name : "Trop grand")
+    : `${layout.capacity} emplacement${layout.capacity > 1 ? "s" : ""}`;
   $("downloadPdf").disabled = placements.length === 0;
-  if (state.photos.length && !layout.capacity) setStatus("Ce format de photo ne tient pas sur le papier avec les marges choisies.");
+  if (layout.exact) renderExactHint(layout);
+  if (layout.exact && !layout.paper) setStatus("Ces dimensions, avec la marge choisie, dépassent le plus grand format de la série.");
+  else if (state.photos.length && !layout.capacity) setStatus("Ce format de photo ne tient pas sur le papier avec les marges choisies.");
   else setStatus("");
+}
+
+function formatMm(value) {
+  return `${Number(value.toFixed(1)).toLocaleString("fr-FR")}`;
+}
+
+function renderExactHint(layout) {
+  const size = `${formatMm(layout.photoW)} × ${formatMm(layout.photoH)} mm`;
+  if (!layout.paper) {
+    $("exactHint").textContent = `Image de ${size} : aucun format ${$("paperSeries").value} ne peut la contenir avec ${formatMm(layout.margin)} mm de marge.`;
+    return;
+  }
+  const orientation = layout.paper.landscape ? "paysage" : "portrait";
+  const sideX = (layout.paperW - layout.photoW) / 2;
+  const sideY = (layout.paperH - layout.photoH) / 2;
+  $("exactHint").textContent = `Papier : ${layout.paper.name} · ${formatMm(layout.paperW)} × ${formatMm(layout.paperH)} mm (${orientation}). `
+    + `Image centrée, imprimée à ${size} exactement, avec ${formatMm(sideX)} mm de blanc à gauche et à droite et ${formatMm(sideY)} mm en haut et en bas. `
+    + "Découpez le long des traits de coupe pour obtenir les dimensions exactes. La photo sélectionnée est imprimée.";
 }
 
 function drawPreviewMarks(ctx, x, y, w, h, scale) {
@@ -318,17 +370,22 @@ function drawPreviewMarks(ctx, x, y, w, h, scale) {
 }
 
 function refreshAll() {
-  const mixed = $("layoutMode").value === "mixed-a4";
+  const mixed = layoutMode() === "mixed-a4";
+  const exact = layoutMode() === "exact";
   const photo = activePhoto();
   const largeCropAvailable = mixed && photo && state.photos.indexOf(photo) < 2;
   if (!mixed || (!largeCropAvailable && state.cropMode === "large")) state.cropMode = "id";
   $("photoFormat").disabled = mixed;
   $("paperFormat").disabled = mixed;
-  $("autoFill").disabled = mixed;
-  $("groupBySource").disabled = mixed || !$("autoFill").checked;
+  $("photoFormatField").hidden = exact;
+  $("paperFormatField").hidden = exact;
+  $("autoFill").disabled = mixed || exact;
+  $("groupBySource").disabled = mixed || exact || !$("autoFill").checked;
   $("margin").disabled = mixed;
-  $("gap").disabled = mixed;
+  $("gap").disabled = mixed || exact;
   $("mixedLayoutHint").hidden = !mixed;
+  $("exactSettings").hidden = !exact;
+  $("exactHint").hidden = !exact;
   $("cropModeControls").hidden = !mixed;
   $("cropModeLarge").disabled = !largeCropAvailable;
   $("cropModeLarge").title = largeCropAvailable ? "" : "Disponible pour les deux premières photos";
@@ -336,10 +393,18 @@ function refreshAll() {
   $("cropModeLarge").classList.toggle("active", state.cropMode === "large");
   $("cropModeId").setAttribute("aria-pressed", String(state.cropMode === "id"));
   $("cropModeLarge").setAttribute("aria-pressed", String(state.cropMode === "large"));
-  $("guideLegend").hidden = state.cropMode === "large";
+  $("guideLegend").hidden = state.cropMode === "large" || exact;
   const cropSize = cropDimensions();
   $("cropStage").style.aspectRatio = `${cropSize.width} / ${cropSize.height}`;
+  $("cropStage").style.width = `min(100%, 390px, ${Math.round(585 * cropSize.width / cropSize.height)}px)`;
   cropCanvas.setAttribute("aria-label", state.cropMode === "large" ? "Zone de cadrage du tirage 10 par 15" : "Zone de cadrage de la photo d’identité");
+  if (exact) {
+    $("customPhotoSize").hidden = true;
+    $("customPaperSize").hidden = true;
+  } else {
+    $("customPhotoSize").hidden = $("photoFormat").value !== "custom";
+    $("customPaperSize").hidden = $("paperFormat").value !== "custom";
+  }
   if (mixed) {
     $("photoFormat").value = "35x45";
     $("paperFormat").value = "210x297";
@@ -418,8 +483,13 @@ function placementKey(placement) {
 }
 
 function cropToJpeg(placement) {
-  const targetW = Math.max(240, Math.round(placement.w / 25.4 * 300));
-  const targetH = Math.max(240, Math.round(placement.h / 25.4 * 300));
+  // 300 dpi visés, au moins 240 px sur le petit côté, au plus 16 Mpx pour rester
+  // sous la limite des canevas mobiles. Le ratio est conservé : l’image est
+  // ensuite placée dans le PDF à ses dimensions exactes en millimètres.
+  let pixelsPerMm = Math.max(300 / 25.4, 240 / Math.min(placement.w, placement.h));
+  pixelsPerMm = Math.min(pixelsPerMm, Math.sqrt(16e6 / (placement.w * placement.h)));
+  const targetW = Math.max(1, Math.round(placement.w * pixelsPerMm));
+  const targetH = Math.max(1, Math.round(placement.h * pixelsPerMm));
   const canvas = document.createElement("canvas");
   canvas.width = targetW;
   canvas.height = targetH;
@@ -509,7 +579,9 @@ function downloadPdf() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = layout.mixed ? "planche-photo-mixte-a4.pdf" : `planche-photo-id-${layout.photoW}x${layout.photoH}mm-${layout.paperW}x${layout.paperH}mm.pdf`;
+      anchor.download = layout.mixed ? "planche-photo-mixte-a4.pdf"
+        : layout.exact ? `impression-exacte-${layout.photoW}x${layout.photoH}mm-${layout.paper.name.replace(/\s+/g, "-")}.pdf`
+        : `planche-photo-id-${layout.photoW}x${layout.photoH}mm-${layout.paperW}x${layout.paperH}mm.pdf`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setStatus("PDF généré. Impression : taille réelle, 100 %.", false);
@@ -557,12 +629,13 @@ $("photoFormat").addEventListener("change", () => {
   refreshAll();
 });
 $("paperFormat").addEventListener("change", () => { $("customPaperSize").hidden = $("paperFormat").value !== "custom"; refreshAll(); });
-["photoWidth","photoHeight"].forEach(id => $(id).addEventListener("input", () => { readSizes(); state.photos.forEach(photo => ensureCropState(photo, true, "id")); refreshAll(); }));
+$("paperSeries").addEventListener("change", refreshAll);
+["photoWidth","photoHeight","exactWidth","exactHeight"].forEach(id => $(id).addEventListener("input", () => { readSizes(); state.photos.forEach(photo => ensureCropState(photo, true, "id")); refreshAll(); }));
 ["paperWidth","paperHeight","autoFill","groupBySource","cutMarks","margin","gap"].forEach(id => $(id).addEventListener("input", refreshAll));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js?v=8", { updateViaCache: "none" })
+    navigator.serviceWorker.register("sw.js?v=9", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {});
   });
