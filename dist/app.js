@@ -512,7 +512,7 @@ function buildPdf(layout, placements) {
   let length = 0;
   const pushBytes = bytes => { parts.push(bytes); length += bytes.length; };
   const pushText = value => pushBytes(enc.encode(value));
-  pushBytes(new Uint8Array([0x25,0x50,0x44,0x46,0x2d,0x31,0x2e,0x34,0x0a,0x25,0xe2,0xe3,0xcf,0xd3,0x0a]));
+  pushBytes(new Uint8Array([0x25,0x50,0x44,0x46,0x2d,0x31,0x2e,0x37,0x0a,0x25,0xe2,0xe3,0xcf,0xd3,0x0a]));
 
   const unique = [...new Map(placements.map(placement => [placementKey(placement), placement])).values()];
   const imageData = unique.map(cropToJpeg);
@@ -521,11 +521,21 @@ function buildPdf(layout, placements) {
   const beginObject = number => { offsets[number] = length; pushText(`${number} 0 obj\n`); };
   const endObject = () => pushText("endobj\n");
 
-  beginObject(1); pushText("<< /Type /Catalog /Pages 2 0 R >>\n"); endObject();
+  // Préréglages d’impression lus par les lecteurs PDF compatibles (Acrobat…) :
+  // taille réelle sans mise à l’échelle, papier choisi d’après la taille de la page,
+  // recto seul, un exemplaire.
+  const printPresets = "/ViewerPreferences << /PrintScaling /None /PickTrayByPDFSize true /Duplex /Simplex /NumCopies 1 >>";
+  beginObject(1); pushText(`<< /Type /Catalog /Pages 2 0 R ${printPresets} >>\n`); endObject();
   beginObject(2); pushText("<< /Type /Pages /Kids [3 0 R] /Count 1 >>\n"); endObject();
   const pt = mm => mm * 72 / 25.4;
+  const box = (x, y, w, h) => `[${pt(x).toFixed(4)} ${pt(layout.paperH - y - h).toFixed(4)} ${pt(x + w).toFixed(4)} ${pt(layout.paperH - y).toFixed(4)}]`;
+  // La page est orientée comme le papier ; en impression exacte, la TrimBox
+  // décrit le format fini après découpe des bords blancs.
+  const trim = layout.exact && placements.length === 1
+    ? ` /TrimBox ${box(placements[0].x, placements[0].y, placements[0].w, placements[0].h)}`
+    : "";
   const resources = unique.map((_, i) => `/Im${i + 1} ${imageObjectStart + i} 0 R`).join(" ");
-  beginObject(3); pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pt(layout.paperW).toFixed(4)} ${pt(layout.paperH).toFixed(4)}] /Resources << /XObject << ${resources} >> >> /Contents 4 0 R >>\n`); endObject();
+  beginObject(3); pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pt(layout.paperW).toFixed(4)} ${pt(layout.paperH).toFixed(4)}]${trim} /Rotate 0 /Resources << /XObject << ${resources} >> >> /Contents 4 0 R >>\n`); endObject();
 
   const commands = [];
   placements.forEach(placement => {
@@ -635,7 +645,7 @@ $("paperSeries").addEventListener("change", refreshAll);
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js?v=9", { updateViaCache: "none" })
+    navigator.serviceWorker.register("sw.js?v=10", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {});
   });

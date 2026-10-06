@@ -59,7 +59,7 @@ test("une correction remplace immédiatement l’ancien cache", () => {
   assert.match(serviceWorker, /clients\.claim\(\)/);
   assert.match(serviceWorker, /event\.request\.mode === "navigate"/);
   assert.doesNotMatch(serviceWorker, /caches\.match\(event\.request\)/);
-  assert.match(html, /app\.js\?v=9/);
+  assert.match(html, /app\.js\?v=10/);
   assert.match(app, /updateViaCache:\s*"none"/);
 });
 
@@ -168,4 +168,11 @@ test("le mode d’impression exacte est proposé", () => {
   assert.match(html, /<option value="exact">/);
   for (const id of ["exactWidth", "exactHeight", "paperSeries"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /<option value="ARCH">/);
+});
+
+test("le PDF embarque les préréglages d’impression", () => {
+  assert.match(app, /\/PrintScaling \/None/);
+  assert.match(app, /\/PickTrayByPDFSize true/);
+  assert.match(app, /\/TrimBox/);
+  assert.match(app, /0x2e,0x37,0x0a/);
 });
