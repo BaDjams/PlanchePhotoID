@@ -11,7 +11,8 @@ Application web gratuite permettant de recadrer une ou plusieurs photos d’iden
 - papiers A4, A5, A6, 10 × 15 cm et personnalisés ;
 - remplissage automatique alterné ou groupé par photo d’origine, marges, espacement et traits de découpe ;
 - disposition A4 mixte avec deux tirages 10 × 15 cm disposant de leur propre cadrage et quinze photos d’identité réparties entre toutes les sources ;
-- PDF généré directement dans le navigateur ;
+- impression d’une image aux dimensions exactes saisies (au dixième de millimètre), centrée sur le plus petit format de la série A (A6 → A0) ou ARCH (A → E) pouvant la contenir avec la marge choisie ; une fois les bords blancs découpés le long des traits de coupe, l’image mesure exactement la taille demandée ;
+- PDF généré directement dans le navigateur, avec préréglages d’impression intégrés (taille réelle sans mise à l’échelle, choix du papier d’après la taille de la page, recto seul) et format fini déclaré en TrimBox pour l’impression exacte ;
 - application installable et utilisable hors connexion après la première visite.
 
 ## Utilisation locale
